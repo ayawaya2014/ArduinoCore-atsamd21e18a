@@ -9,12 +9,16 @@
 
 // true  = Is FemtoBeacon COIN     O
 // false = Is FemtoBeacon DONGLE   =[]
-bool is_coin = true;
+bool is_coin = false;
+
+// Only set this to true if you are using more than one dongle,
+// The alternative dongle will be given the "coinId" address.
+bool is_alternate_dongle = false;
 
 int coinId = 0x02; // Default coin to send to. Also sets the Coin node ID if is_coin = true
 
-int myNodeId = is_coin ? coinId : 0x01;
-int destNodeId = is_coin ? 0x01 : coinId;
+int myNodeId = is_coin || is_alternate_dongle ? coinId : 0x01;
+int destNodeId = is_coin || is_alternate_dongle ? 0x01 : coinId;
 
 
 /**
