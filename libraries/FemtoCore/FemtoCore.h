@@ -3,11 +3,12 @@
 
     #define FEMTO_SEMVER_MAJOR "1"
     #define FEMTO_SEMVER_MINOR "0"
-    #define FEMTO_SEMVER_PATCH "0"
+    #define FEMTO_SEMVER_PATCH "1"
 
     #include <stdio.h>
     #include <string.h>
     #include <stdlib.h>
+    #include <math.h>
 
     #include <Arduino.h>
     #include <Wire.h>
@@ -174,7 +175,7 @@
             /** RTC Stuff EOF **/
 
             /** FreeIMU Stuff BOF **/
-            static const int FREEIMU_OUTPUT_BUFFER_SIZE = 128; // In the FreeIMU_serial_ARM_CPU sketch, the "str" variable was originally 128 chars.
+            static const int FREEIMU_OUTPUT_BUFFER_SIZE = APP_BUFFER_SIZE; // In the FreeIMU_serial_ARM_CPU sketch, the "str" variable was originally 128 chars.
             static const int FEMTO_PIN_IMU_INT = 4;
             static FreeIMU freeIMU;
             /** FreeIMU Stuff EOF **/
@@ -283,6 +284,7 @@
             static bool getIsNetworkBusy();
 
             static void handleNetworking();
+            static void handleIMU();
             static void handleSerial();
             static void handleSerialRx();
 
@@ -397,6 +399,7 @@
             static volatile uint8_t _wake_zero_motion_threshold;
             static volatile uint8_t _wake_zero_motion_duration;
 
+            static volatile bool    _free_imu_initialized;
             static volatile bool    _sensor_is_on;
             static volatile bool    _data_flow_enabled;
             static char    _data_flow_command[APP_BUFFER_SIZE];

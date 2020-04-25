@@ -9,7 +9,7 @@
 
 // true  = Is FemtoBeacon COIN     O
 // false = Is FemtoBeacon DONGLE   =[]
-bool is_coin = false;
+bool is_coin = true;
 
 // Only set this to true if you are using more than one dongle,
 // The alternative dongle will be given the "coinId" address.
@@ -65,7 +65,7 @@ void setup() {
 }
 
 void loop() {
-  
+  FemtoCore::handleIMU();
   FemtoCore::handleNetworking(); // Required to call SYS_TaskHandler() of LwMesh stack library (handles networking stuff).
   FemtoCore::handleSerial();
 }

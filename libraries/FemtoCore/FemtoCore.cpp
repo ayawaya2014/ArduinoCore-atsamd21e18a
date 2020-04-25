@@ -39,6 +39,7 @@ volatile int  FemtoCore::_sleep_mode                    = 0x01; // Default is 0x
 volatile uint32_t  FemtoCore::_rtc_sleep_ms             = 10000; // 10 seconds (10000 ms)
 volatile bool FemtoCore::_should_be_sleeping            = false;
 volatile bool FemtoCore::_is_rtc_started                = false;
+volatile bool FemtoCore::_free_imu_initialized          = false;
 volatile bool FemtoCore::_sensor_is_on                  = false;
 volatile bool FemtoCore::_data_flow_enabled             = false;
 
@@ -908,6 +909,12 @@ void FemtoCore::_networkingSendMessageConfirm(NWK_DataReq_t *req)
     (void) req;
 }
 
+void FemtoCore::handleIMU() {
+    if (is_femtobeacon_coin && _free_imu_initialized) {
+        freeIMU.getQ(_free_imu_quaternions, _free_imu_val);
+    }
+}
+
 void FemtoCore::handleSerial() {
 
     #ifdef ENABLE_SERIAL
@@ -973,9 +980,9 @@ void FemtoCore::handleSerialRx() {
 
         #ifdef DEBUG
            Serial.print("FemtoCore::handleSerialRx() processing command (");
-	   Serial.print(input_buffer) ;
+	       Serial.print(input_buffer) ;
            Serial.println(") locally");
-	#endif
+	    #endif
 
         processCommand(input_buffer, 0x00, 0x00, 0x00);
     }
@@ -1366,7 +1373,7 @@ void FemtoCore::sendSampleLegacy(byte input_from, byte output_to, int to_node_id
  * @param int   to_node_id If a reply is required, this is the node address ID which requested a reply.
  */
 void FemtoCore::processCommand(char* command_chars, byte input_from, byte output_to, int to_node_id) {
-
+    uint8_t bufferSize = sizeof(output_to > 1 ? _free_imu_network_data : _free_imu_serial_data);
     int command_size = strlen(command_chars);
     // char cmd = (char)command_chars[0];
 
@@ -1402,13 +1409,14 @@ void FemtoCore::processCommand(char* command_chars, byte input_from, byte output
             // If output_to is serial, output with a new-line at the end.
             // If output_to is network, send output as is.
             _reply(buffer, output_to < 1 ? 1 : output_to, to_node_id);
-            memset(buffer, 0, sizeof(buffer));
+            memset(buffer, 0, bufferSize);
         }
         else if(cmd=='1'){
             #ifdef DEBUG
                 Serial.println("Starting FreeIMU.");
             #endif
             freeIMU.init(true);
+            _free_imu_initialized = true;
 
             #ifdef DEBUG
                 Serial.println("FreeIMU started.");
@@ -1479,8 +1487,7 @@ void FemtoCore::processCommand(char* command_chars, byte input_from, byte output
 
                 output += millis() + ',' + "\r\n";
                 buffer = const_cast<char*>(output.c_str());
-                _reply(buffer, output_to < 1 ? 0 : output_to, to_node_id);
-                memset(buffer, 0, sizeof(buffer));
+                
             }
         }
         else if(cmd=='b') {
@@ -1517,20 +1524,43 @@ void FemtoCore::processCommand(char* command_chars, byte input_from, byte output
                 #endif
                 // Serial.println();
                 _reply(buffer, output_to < 1 ? 1 : output_to, to_node_id);
-                memset(buffer, 0, sizeof(buffer));
+                memset(buffer, 0, bufferSize);
             }
         }
         else if(cmd == 'q') {
             // uint8_t count = _serialBusyWait(); // Expects a char representing count
             uint8_t count = command.substring(1).toInt(); // grab the char after the 'q' char. It's the count.
+            uint8_t sizeNeeded = (count * 32) + (count - 1);
+            char tempBuffer[32]; // 4 quaternions, each needs an 8 char buffer.
             char* buffer = output_to > 1 ? _free_imu_network_data : _free_imu_serial_data;
-            for(uint8_t i=0; i<count; i++) {
-                freeIMU.getQ(_free_imu_quaternions, _free_imu_val);
-                // serialPrintFloatArr(_free_imu_quaternions, 4);
-                // Serial.println("");
-                toPrintableFloatArr(_free_imu_quaternions, 4, buffer);
+            
+            uint8_t tempBufferSize = sizeof(tempBuffer);
+
+            memset(buffer, 0, bufferSize);
+
+            if (sizeNeeded > bufferSize) {
+                char error_message[60];
+                sprintf(error_message, "E: APP_BUFFER_SIZE is %d, needs %d", bufferSize, sizeNeeded);
+
+                memcpy(buffer, error_message, sizeof(error_message));
                 _reply(buffer, output_to < 1 ? 1 : output_to, to_node_id);
-                memset(buffer, 0, sizeof(buffer));
+                memset(buffer, 0, bufferSize);
+            } else {
+                
+                
+                for(uint8_t i=0; i<count; i++) {
+                    freeIMU.getQ(_free_imu_quaternions, _free_imu_val);
+                    // serialPrintFloatArr(_free_imu_quaternions, 4);
+                    // Serial.println("");
+                    toPrintableFloatArr(_free_imu_quaternions, 4, tempBuffer);
+                    memcpy(buffer + (i * (tempBufferSize + 1)), tempBuffer, tempBufferSize);
+                    if (i > 0) {
+                        memcpy(buffer + (i * (tempBufferSize + 1)) - 1, "\n", 1);
+                    }
+                 }
+
+                _reply(buffer, output_to < 1 ? 1 : output_to, to_node_id);
+                memset(buffer, 0, bufferSize);
             }
         }
         else if(cmd == 'z') {
@@ -1882,7 +1912,7 @@ void FemtoCore::processCommand(char* command_chars, byte input_from, byte output
       sprintf(buffer, "Serial number: 0x%08x", _serialNumber);
 
       _reply(buffer, output_to < 1 ? 1 : output_to, to_node_id);
-      memset(buffer, 0, sizeof(buffer));
+      memset(buffer, 0, bufferSize);
     }
 
     // SET_NODE_ID:0x0001 Where range is 0x0001 to 0xfffe. 0xffff is reserved for broadcasts.
